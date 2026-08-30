@@ -228,7 +228,7 @@ class RazerControlLogic:
         """一键应用预设配置到设备"""
         rows = await self.db.fetchall(self.db_path, "SELECT * FROM razer_profiles WHERE id = ?", (profile_id,))
         if not rows:
-            return self.res.fail(msg="找不到对应的预设配置", code=404)
+            return self.res.error(msg="找不到对应的预设配置", code=404)
         
         p = dict(rows[0])
         

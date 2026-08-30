@@ -71,7 +71,7 @@ const fetchLogs = async () => {
   loading.value = true
   try {
     const res = await api.getLogs(60)
-    if (res.status === 'ok') {
+    if (res && (res.status === 'success' || res.code === 200 || res.status === 'ok')) {
       logs.value = res.data || []
     }
   } catch (err) {

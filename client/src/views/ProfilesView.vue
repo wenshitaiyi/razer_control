@@ -156,10 +156,12 @@ const rgbToHex = (r, g, b) => {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`
 }
 
+const isSuccess = (res) => res && (res.status === 'success' || res.code === 200 || res.status === 'ok')
+
 const fetchProfiles = async () => {
   try {
     const res = await api.getProfiles()
-    if (res.status === 'ok') {
+    if (isSuccess(res)) {
       profiles.value = res.data || []
     }
   } catch (err) {
@@ -250,7 +252,7 @@ const applyProfile = async (id) => {
   applyingId.value = id
   try {
     const res = await api.applyProfile(id)
-    if (res.status === 'ok') {
+    if (isSuccess(res)) {
       ElMessage.success(res.msg || '预设方案已成功写入设备')
       await fetchProfiles()
     }

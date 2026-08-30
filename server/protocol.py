@@ -134,12 +134,11 @@ def list_razer_devices() -> List[Dict[str, Any]]:
         usage_page = d.get("usage_page", 0)
         usage = d.get("usage", 0)
         
-        # 判断该接口是否适合用于下发控制指令
-        is_control_interface = interface_num in (0, 1, 2) or usage_page in (1, 0xFF00, 0x0C)
+        # 判断该接口是否适合用于下发控制指令 (优先 MI_00 / 接口 0)
+        is_control_interface = (interface_num == 0) or ("MI_00" in path_str) or (interface_num in (0, 1, 2) and usage_page in (1, 0xFF00, 0x0C))
 
         devices.append({
             "path": path_str,
-            "path_bytes": path_bytes,
             "vendor_id": d.get("vendor_id", RAZER_VID),
             "vendor_id_hex": f"0x{d.get('vendor_id', RAZER_VID):04X}",
             "product_id": d.get("product_id", 0),
@@ -155,6 +154,8 @@ def list_razer_devices() -> List[Dict[str, Any]]:
             "is_control_interface": is_control_interface
         })
 
+    # 优先将最合适的控制接口（接口 0 / MI_00）排在首位
+    devices.sort(key=lambda x: (0 if (x["interface_number"] == 0 or "MI_00" in x["path"]) else 1, x["interface_number"]))
     return devices
 
 
@@ -205,7 +206,8 @@ def send_to_razer(command_class: int, command_id: int, arguments: List[int], tar
         dev_handle = None
         try:
             dev_handle = hid.device()
-            path_arg = dev_meta["path_bytes"] if isinstance(dev_meta["path_bytes"], bytes) else dev_meta["path"].encode("utf-8")
+            raw_path = dev_meta.get("path", "")
+            path_arg = raw_path.encode("utf-8") if isinstance(raw_path, str) else raw_path
             dev_handle.open_path(path_arg)
             
             # 发送 Feature Report

@@ -169,7 +169,7 @@ const fetchServices = async () => {
   scanning.value = true
   try {
     const res = await api.getSystemServices()
-    if (res.status === 'ok' && res.data) {
+    if (res && (res.status === 'success' || res.code === 200 || res.status === 'ok') && res.data) {
       serviceList.value = res.data.services || []
       runningCount.value = res.data.running_count || 0
       cleanupScript.value = res.data.cleanup_script || ''

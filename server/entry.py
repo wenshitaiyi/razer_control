@@ -90,7 +90,7 @@ async def start(ctx):
         await record_audit(ctx, req, result, LOCAL_USER)
         if result.get("success"):
             return res.success(data=result, msg=result.get("message", "DPI 设置成功"))
-        return res.fail(data=result, msg=result.get("message", "DPI 设置失败"), code=500)
+        return res.error(msg=result.get("message", "DPI 设置失败"), code=500, data=result)
 
     @router.post("/polling-rate")
     async def set_polling_rate(req: Request, payload: PollingRatePayload):
@@ -99,7 +99,7 @@ async def start(ctx):
         await record_audit(ctx, req, result, LOCAL_USER)
         if result.get("success"):
             return res.success(data=result, msg=result.get("message", "回报率设置成功"))
-        return res.fail(data=result, msg=result.get("message", "回报率设置失败"), code=500)
+        return res.error(msg=result.get("message", "回报率设置失败"), code=500, data=result)
 
     @router.post("/lighting")
     async def set_lighting(req: Request, payload: LightingPayload):
@@ -108,7 +108,7 @@ async def start(ctx):
         await record_audit(ctx, req, result, LOCAL_USER)
         if result.get("success"):
             return res.success(data=result, msg=result.get("message", "灯效设置成功"))
-        return res.fail(data=result, msg=result.get("message", "灯效设置失败"), code=500)
+        return res.error(msg=result.get("message", "灯效设置失败"), code=500, data=result)
 
     # ---------- 预设配置管理 ----------
 

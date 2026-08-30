@@ -9,18 +9,33 @@
         <div class="device-info-text">
           <div class="device-title-row">
             <h2 class="device-name">{{ currentDeviceName }}</h2>
-            <span v-if="hasDevice" class="rz-badge rz-badge-success">● 已直连 HID</span>
+            <span v-if="hasDevice" class="rz-badge rz-badge-success">● 已直连 HID ({{ devices.length }} 个接口)</span>
             <span v-else class="rz-badge rz-badge-warning">未发现雷蛇设备 (展示模拟)</span>
           </div>
           <p class="device-desc-text">
             <span>VID: <b>0x1532</b> (Razer)</span>
             <span v-if="selectedDevice" style="margin-left: 12px;">PID: <b>{{ selectedDevice.product_id_hex }}</b></span>
-            <span v-if="selectedDevice" style="margin-left: 12px;">接口: <b>#{{ selectedDevice.interface_number }}</b></span>
+            <span v-if="selectedDevice" style="margin-left: 12px;">接口编号: <b>#{{ selectedDevice.interface_number }}</b></span>
             <span style="margin-left: 12px;" class="text-mute">通讯模式: 90-byte Feature Report (0-Daemon)</span>
           </p>
         </div>
       </div>
-      <div class="device-header-right">
+      <div class="device-header-right" style="display: flex; align-items: center; gap: 10px;">
+        <el-select
+          v-if="devices.length > 1"
+          v-model="selectedDevicePath"
+          placeholder="切换控制接口"
+          size="default"
+          style="width: 220px;"
+          @change="onDeviceSelectChange"
+        >
+          <el-option
+            v-for="(d, idx) in devices"
+            :key="d.path"
+            :label="`${d.product_string} (接口 #${d.interface_number})`"
+            :value="d.path"
+          />
+        </el-select>
         <el-button
           type="success"
           plain
@@ -315,14 +330,28 @@ const hexToRgb = (hex) => {
   }
 }
 
+const selectedDevicePath = ref('')
+
+const isSuccess = (res) => {
+  return res && (res.status === 'success' || res.code === 200 || res.status === 'ok')
+}
+
+const onDeviceSelectChange = (path) => {
+  const found = devices.value.find(d => d.path === path)
+  if (found) {
+    selectedDevice.value = found
+  }
+}
+
 const fetchDevices = async () => {
   scanning.value = true
   try {
     const res = await api.getDevices()
-    if (res.status === 'ok' && res.data) {
+    if (isSuccess(res) && res.data) {
       devices.value = res.data.devices || []
       if (devices.value.length > 0) {
         selectedDevice.value = devices.value.find(d => d.is_control_interface) || devices.value[0]
+        selectedDevicePath.value = selectedDevice.value.path
       }
     }
   } catch (err) {
@@ -335,7 +364,7 @@ const fetchDevices = async () => {
 const fetchProfiles = async () => {
   try {
     const res = await api.getProfiles()
-    if (res.status === 'ok') {
+    if (isSuccess(res)) {
       quickProfiles.value = res.data || []
     }
   } catch (err) {
@@ -354,11 +383,10 @@ const applyDpi = async () => {
     const targetY = splitXY.value ? dpiY.value : dpiX.value
     const path = selectedDevice.value?.path || null
     const res = await api.setDpi(dpiX.value, targetY, path)
-    if (res.status === 'ok') {
+    if (isSuccess(res)) {
       ElMessage.success(res.msg || `DPI 已成功设置为 ${dpiX.value}`)
     }
   } catch (e) {
-    // 错误在拦截器已弹窗
   } finally {
     savingDpi.value = false
   }
@@ -369,7 +397,7 @@ const applyPollingRate = async () => {
   try {
     const path = selectedDevice.value?.path || null
     const res = await api.setPollingRate(pollingRate.value, path)
-    if (res.status === 'ok') {
+    if (isSuccess(res)) {
       ElMessage.success(res.msg || `回报率已设置为 ${pollingRate.value} Hz`)
     }
   } catch (e) {
@@ -384,7 +412,7 @@ const applyLighting = async () => {
     const path = selectedDevice.value?.path || null
     const { r, g, b } = hexToRgb(ledColor.value)
     const res = await api.setLighting(ledEnabled.value, r, g, b, path)
-    if (res.status === 'ok') {
+    if (isSuccess(res)) {
       ElMessage.success(res.msg || (ledEnabled.value ? '灯效已更新' : '已彻底熄灭灯光'))
     }
   } catch (e) {
@@ -398,7 +426,7 @@ const applyQuickProfile = async (id) => {
   try {
     const path = selectedDevice.value?.path || null
     const res = await api.applyProfile(id, path)
-    if (res.status === 'ok') {
+    if (isSuccess(res)) {
       ElMessage.success(res.msg || '预设方案已成功生效')
       await fetchProfiles()
       // 同步界面参数
