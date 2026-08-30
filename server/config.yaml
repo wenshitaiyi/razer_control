@@ -1,0 +1,59 @@
+service_name: razer_control
+display_name: 雷蛇设备辅助控制
+api_prefix: /api/razer_control
+version: 1.0.0
+description: 基于 Python HID API 的轻量级雷蛇设备直通控制服务，摆脱臃肿驱动，消除 DWM 与 GPU 卡顿。
+
+# 雷蛇厂商 VID (0x1532 = 5426)
+vendor_id: 0x1532
+
+# 默认参数
+default_dpi: 1600
+default_polling_rate: 1000
+default_led_color:
+  r: 0
+  g: 255
+  b: 0
+
+# 系统优化检测配置
+detect_services:
+  - name: "Razer Central Service"
+    display_name: "Razer Central Service"
+    description: "雷蛇核心后台进程，用于启动与管理其他服务"
+    risk_level: "High"
+    impact: "常驻后台占用 CPU/内存，触发多层进程注入"
+  - name: "Razer Synapse Service"
+    display_name: "Razer Synapse Service"
+    description: "雷云核心主服务，负责按键映射、宏与配置文件同步"
+    risk_level: "High"
+    impact: "窗口焦点切换时触发配置文件重载与 DWM 重绘"
+  - name: "Razer Synapse Service Process"
+    display_name: "Razer Synapse Service Process"
+    description: "雷云子进程，执行具体驱动 hook"
+    risk_level: "Medium"
+    impact: "内存开销大，频繁挂钩输入栈"
+  - name: "Razer Game Manager Service"
+    display_name: "Razer Game Manager Service"
+    description: "游戏检测与进程监视服务"
+    risk_level: "Critical"
+    impact: "频繁轮询 explorer.exe 与 taskmgr.exe，导致 Alt+Tab 严重掉帧与卡顿"
+  - name: "Razer Chroma SDK Server"
+    display_name: "Razer Chroma SDK Server"
+    description: "幻彩灯效 SDK 服务器"
+    risk_level: "High"
+    impact: "与 Chrome/Edge MPO 硬件加速图层冲突，迫使 DWM 进行全屏重绘 (Dirty Rect Repaint)"
+  - name: "Razer Chroma SDK Service"
+    display_name: "Razer Chroma SDK Service"
+    description: "幻彩 SDK 调度服务"
+    risk_level: "Medium"
+    impact: "持续后台通信与内存开销"
+  - name: "Razer Chroma StreamServer"
+    display_name: "Razer Chroma StreamServer"
+    description: "灯效流式传输与第三方联动服务 (如 Hue 灯具)"
+    risk_level: "Medium"
+    impact: "网络与后台线程常驻"
+  - name: "CortexLauncherService"
+    display_name: "Razer Cortex Launcher Service"
+    description: "雷蛇游戏加速器服务"
+    risk_level: "High"
+    impact: "暴力杀死后台进程，干扰 Windows 内存管理与前台响应"

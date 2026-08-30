@@ -1,0 +1,22 @@
+# 数据库与运行时数据
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# 前端依赖与临时产物
+node_modules/
+client/node_modules/
+client/dist/
+.vite/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE 与系统文件
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

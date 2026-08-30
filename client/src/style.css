@@ -1,0 +1,119 @@
+:root {
+  --rz-green: #00ff00;
+  --rz-green-glow: rgba(0, 255, 0, 0.35);
+  --rz-green-light: #33ff33;
+  --rz-green-dark: #008800;
+  --rz-cyan: #00f0ff;
+  --rz-purple: #9d00ff;
+  --rz-bg-darker: #0b0f17;
+  --rz-bg-card: #131b26;
+  --rz-bg-card-hover: #1a2535;
+  --rz-border: #223044;
+  --rz-border-active: #00ff00;
+  --rz-text-primary: #e6edf3;
+  --rz-text-secondary: #8b949e;
+  --rz-text-muted: #586069;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--rz-bg-darker);
+  color: var(--rz-text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* 滚动条定制 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--rz-bg-darker);
+}
+::-webkit-scrollbar-thumb {
+  background: #2a3b50;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--rz-green);
+}
+
+/* 卡片与容器通用样式 */
+.rz-card {
+  background: var(--rz-bg-card);
+  border: 1px solid var(--rz-border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.25s ease;
+}
+
+.rz-card:hover {
+  border-color: #2e4460;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.rz-card.glow-green {
+  border-color: rgba(0, 255, 0, 0.4);
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.15);
+}
+
+/* 渐变标题与徽章 */
+.rz-gradient-title {
+  background: linear-gradient(135deg, #00ff00 0%, #00f0ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+}
+
+.rz-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.rz-badge-success {
+  background: rgba(0, 255, 0, 0.15);
+  color: #00ff00;
+  border: 1px solid rgba(0, 255, 0, 0.4);
+}
+.rz-badge-warning {
+  background: rgba(255, 176, 0, 0.15);
+  color: #ffb000;
+  border: 1px solid rgba(255, 176, 0, 0.4);
+}
+.rz-badge-danger {
+  background: rgba(255, 77, 79, 0.15);
+  color: #ff4d4f;
+  border: 1px solid rgba(255, 77, 79, 0.4);
+}
+.rz-badge-info {
+  background: rgba(0, 240, 255, 0.15);
+  color: #00f0ff;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+}
+
+/* 覆盖 Element Plus 暗黑主题部分样式适配 */
+.el-slider__bar {
+  background-color: var(--rz-green) !important;
+}
+.el-slider__button {
+  border-color: var(--rz-green) !important;
+}
+.el-radio-button__inner:hover {
+  color: var(--rz-green) !important;
+}
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background-color: var(--rz-green-dark) !important;
+  border-color: var(--rz-green) !important;
+  color: #ffffff !important;
+  box-shadow: -1px 0 0 0 var(--rz-green) !important;
+}
