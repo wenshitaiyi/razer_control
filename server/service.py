@@ -6,11 +6,10 @@ from typing import List, Dict, Any, Optional
 
 from .protocol import (
     list_razer_devices,
-    send_to_razer,
-    build_dpi_args,
-    build_polling_rate_args,
-    build_static_led_args,
-    build_turn_off_led_args,
+    send_packets_to_device,
+    build_dpi_packets,
+    build_polling_rate_packets,
+    build_lighting_packets,
     CMD_CLASS_PERFORMANCE,
     CMD_CLASS_DEVICE,
     CMD_CLASS_LIGHTING,
@@ -121,13 +120,13 @@ class RazerControlLogic:
 
     async def apply_dpi(self, dpi_x: int, dpi_y: Optional[int] = None, target_path: Optional[str] = None) -> Dict[str, Any]:
         """向雷蛇鼠标下发 DPI 设置"""
-        cmd_class, cmd_id, args = build_dpi_args(dpi_x, dpi_y)
-        res = await asyncio.to_thread(send_to_razer, cmd_class, cmd_id, args, target_path)
-        
+        packets = build_dpi_packets(dpi_x, dpi_y)
+        res = await asyncio.to_thread(send_packets_to_device, packets, target_path)
+
         await self.log_action(
             action="SET_DPI",
-            cmd_class=cmd_class,
-            cmd_id=cmd_id,
+            cmd_class=CMD_CLASS_PERFORMANCE,
+            cmd_id=CMD_ID_SET_DPI,
             payload={"dpi_x": dpi_x, "dpi_y": dpi_y or dpi_x},
             device=res.get("device_name"),
             status="SUCCESS" if res["success"] else "FAILED",
@@ -138,13 +137,13 @@ class RazerControlLogic:
 
     async def apply_polling_rate(self, rate_hz: int, target_path: Optional[str] = None) -> Dict[str, Any]:
         """向雷蛇鼠标下发回报率设置 (1000/500/125Hz)"""
-        cmd_class, cmd_id, args = build_polling_rate_args(rate_hz)
-        res = await asyncio.to_thread(send_to_razer, cmd_class, cmd_id, args, target_path)
-        
+        packets = build_polling_rate_packets(rate_hz)
+        res = await asyncio.to_thread(send_packets_to_device, packets, target_path)
+
         await self.log_action(
             action="SET_POLLING_RATE",
-            cmd_class=cmd_class,
-            cmd_id=cmd_id,
+            cmd_class=CMD_CLASS_DEVICE,
+            cmd_id=CMD_ID_SET_POLLING_RATE,
             payload={"rate_hz": rate_hz},
             device=res.get("device_name"),
             status="SUCCESS" if res["success"] else "FAILED",
@@ -154,22 +153,17 @@ class RazerControlLogic:
         return res
 
     async def apply_lighting(self, enabled: bool, r: int = 0, g: int = 255, b: int = 0, target_path: Optional[str] = None) -> Dict[str, Any]:
-        """向雷蛇鼠标下发静态 RGB 或彻底关灯设置"""
-        if enabled:
-            cmd_class, cmd_id, args = build_static_led_args(r, g, b)
-            action_name = "SET_LED_RGB"
-            payload_data = {"enabled": True, "r": r, "g": g, "b": b}
-        else:
-            cmd_class, cmd_id, args = build_turn_off_led_args()
-            action_name = "TURN_OFF_LED"
-            payload_data = {"enabled": False}
+        """向雷蛇鼠标下发静态 RGB / 单色常亮 / 彻底关灯设置"""
+        packets = build_lighting_packets(enabled, r, g, b)
+        action_name = "SET_LED_RGB" if enabled else "TURN_OFF_LED"
+        payload_data = {"enabled": enabled, "r": r, "g": g, "b": b}
 
-        res = await asyncio.to_thread(send_to_razer, cmd_class, cmd_id, args, target_path)
+        res = await asyncio.to_thread(send_packets_to_device, packets, target_path)
 
         await self.log_action(
             action=action_name,
-            cmd_class=cmd_class,
-            cmd_id=cmd_id,
+            cmd_class=CMD_CLASS_LIGHTING,
+            cmd_id=CMD_ID_SET_LIGHTING,
             payload=payload_data,
             device=res.get("device_name"),
             status="SUCCESS" if res["success"] else "FAILED",

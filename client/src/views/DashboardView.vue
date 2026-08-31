@@ -163,30 +163,39 @@
         </div>
       </div>
 
-      <!-- 3. RGB 灯效 / 关灯控制卡片 -->
+      <!-- 3. RGB / 单色灯效与一键熄灭控制卡片 -->
       <div class="rz-card control-card">
         <div class="card-header">
           <div class="title-with-icon">
             <el-icon color="#00ff00"><Sunny /></el-icon>
-            <h3>RGB 灯效 / 一键熄灭</h3>
+            <h3>{{ selectedDevice?.is_single_color ? '单色绿光 / 双灯区控制' : 'RGB 幻彩灯效 / 一键熄灭' }}</h3>
           </div>
-          <span class="rz-badge rz-badge-info">Class: 0x0F | ID: 0x02</span>
+          <span class="rz-badge" :class="selectedDevice?.is_single_color ? 'rz-badge-warning' : 'rz-badge-info'">
+            {{ selectedDevice?.is_single_color ? '单色硬件 (Logo/滚轮)' : 'Chroma 幻彩 RGB' }}
+          </span>
         </div>
 
         <div class="control-body">
+          <!-- 针对单色设备（如 DeathAdder Essential）的适配提示 -->
+          <div v-if="selectedDevice?.is_single_color" class="single-color-banner">
+            <el-icon color="#00ff00"><InfoFilled /></el-icon>
+            <span>检测到当前鼠标为<b>单色绿光硬件</b>（DeathAdder Essential 系列），已为您自动启用多灯区（Logo & 滚轮）纯净控制协议。</span>
+          </div>
+
           <!-- 开关与调色器 -->
           <div class="lighting-toggle-row">
-            <span class="slider-label">Logo 氛围灯效</span>
+            <span class="slider-label">硬件灯光状态</span>
             <el-switch
               v-model="ledEnabled"
-              active-text="开启静态光"
+              :active-text="selectedDevice?.is_single_color ? '开启绿光常亮' : '开启静态光'"
               inactive-text="彻底关闭 (零眩光/省电)"
               inline-prompt
               style="--el-switch-on-color: #00ff00; --el-switch-off-color: #334155;"
             />
           </div>
 
-          <div v-if="ledEnabled" class="color-picker-box">
+          <!-- Chroma 设备的调色器 -->
+          <div v-if="ledEnabled && !selectedDevice?.is_single_color" class="color-picker-box">
             <div class="color-preview-circle" :style="{ backgroundColor: ledColor, boxShadow: `0 0 16px ${ledColor}` }"></div>
             <div class="color-inputs">
               <el-color-picker v-model="ledColor" :predefine="colorPresets" />
@@ -194,8 +203,8 @@
             </div>
           </div>
 
-          <!-- 预设色板 -->
-          <div v-if="ledEnabled" class="color-palette-row">
+          <!-- Chroma 预设色板 -->
+          <div v-if="ledEnabled && !selectedDevice?.is_single_color" class="color-palette-row">
             <div
               v-for="c in colorPresets"
               :key="c"
@@ -206,9 +215,15 @@
             ></div>
           </div>
 
+          <!-- 单色设备的常亮预览 -->
+          <div v-else-if="ledEnabled && selectedDevice?.is_single_color" class="single-led-preview">
+            <div class="green-indicator-dot glow-green"></div>
+            <span class="text-mute">已就绪：将向 Logo 氛围灯 (0x04) 与 滚轮灯 (0x01) 同步下发静态常亮指令。</span>
+          </div>
+
           <div v-else class="led-off-banner">
             <el-icon color="#8b949e" :size="24"><Moon /></el-icon>
-            <p>已选择彻底熄灭灯光。可消除 Chroma 渲染管线开销并大幅提升续航。</p>
+            <p>已选择彻底熄灭硬件所有灯区。完全切断灯光渲染管线，消除发热与 DWM 资源争用。</p>
           </div>
 
           <div class="apply-footer">
@@ -218,7 +233,7 @@
               :loading="savingLed"
               @click="applyLighting"
             >
-              {{ ledEnabled ? '应用 RGB 静态灯效' : '一键熄灭 Logo 灯' }}
+              {{ ledEnabled ? (selectedDevice?.is_single_color ? '应用单色常亮设定' : '应用 RGB 静态灯效') : '一键彻底熄灭所有灯光' }}
             </el-button>
           </div>
         </div>
@@ -750,13 +765,40 @@ onMounted(async () => {
   transition: all 0.2s;
 }
 
-.palette-dot:hover {
-  transform: scale(1.15);
-}
-
 .palette-dot.active {
   border-color: #ffffff;
   box-shadow: 0 0 8px #ffffff;
+}
+
+.single-color-banner {
+  background: rgba(0, 255, 0, 0.08);
+  border: 1px solid rgba(0, 255, 0, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #e6edf3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.single-led-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #0d131c;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #1c2838;
+}
+
+.green-indicator-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #00ff00;
+  box-shadow: 0 0 12px #00ff00;
+  flex-shrink: 0;
 }
 
 .led-off-banner {
