@@ -138,13 +138,29 @@ def build_polling_rate_packets(rate_hz: int) -> List[Tuple[int, int, List[int], 
     ]
 
 
-def build_lighting_packets(enabled: bool, r: int = 0, g: int = 255, b: int = 0, pid: Optional[int] = None, brightness: int = 255) -> List[Tuple[int, int, List[int], int]]:
+CMD_ID_SET_BRIGHTNESS = 0x04
+
+def build_lighting_packets(
+    enabled: bool,
+    mode: str = "static",
+    brightness: int = 100,
+    r: int = 0,
+    g: int = 255,
+    b: int = 0,
+    pid: Optional[int] = None
+) -> List[Tuple[int, int, List[int], int]]:
     """
-    构造 Logo 氛围灯的静态常亮与彻底熄灭报文 (0x0F, 0x02)
+    构造雷蛇灯效报文：
+    - 支持亮度调节 (0% ~ 100% -> 0 ~ 255) (0x0F, 0x04)
+    - 支持常亮模式 Static (0x0F, 0x02)
+    - 支持呼吸模式 Breathing (0x0F, 0x02)
+    - 支持彻底熄灭 (None / Brightness 0)
     """
     r = max(0, min(255, r))
     g = max(0, min(255, g))
     b = max(0, min(255, b))
+    brightness_pct = max(0, min(100, brightness))
+    raw_brightness = int(brightness_pct * 255 / 100)
 
     if pid and pid in SINGLE_COLOR_DEVICES:
         target_leds = SINGLE_COLOR_DEVICES[pid].get("leds", [LOGO_LED])
@@ -153,14 +169,28 @@ def build_lighting_packets(enabled: bool, r: int = 0, g: int = 255, b: int = 0, 
 
     packets = []
 
-    if enabled:
+    if enabled and brightness_pct > 0:
         for led_id in target_leds:
-            # 扩展矩阵静态常亮协议: [VARSTORE(0x01), led_id, Static(0x01), 0x00, 0x00, 0x01, R, G, B]
-            args_ext_static = [VARSTORE, led_id, 0x01, 0x00, 0x00, 0x01, r, g, b]
-            packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_LIGHTING, args_ext_static, 0x3F))
+            # 1. 亮度设置 (Class 0x0F, ID 0x04, [VARSTORE, led_id, raw_brightness])
+            args_brightness = [VARSTORE, led_id, raw_brightness]
+            packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_BRIGHTNESS, args_brightness, 0x3F))
+
+            # 2. 灯效模式设置 (Class 0x0F, ID 0x02)
+            if mode == "breathing":
+                # 呼吸模式: [VARSTORE(0x01), led_id, 0x02, 0x01, 0x00, 0x01, r, g, b]
+                args_breathing = [VARSTORE, led_id, 0x02, 0x01, 0x00, 0x01, r, g, b]
+                packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_LIGHTING, args_breathing, 0x3F))
+            else:
+                # 静态常亮模式: [VARSTORE(0x01), led_id, 0x01, 0x00, 0x00, 0x01, r, g, b]
+                args_static = [VARSTORE, led_id, 0x01, 0x00, 0x00, 0x01, r, g, b]
+                packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_LIGHTING, args_static, 0x3F))
     else:
         for led_id in target_leds:
-            # 扩展矩阵彻底熄灭协议: [VARSTORE(0x01), led_id, None(0x00), 0x00, 0x00, 0x00]
+            # 1. 亮度归零
+            args_brightness_zero = [VARSTORE, led_id, 0x00]
+            packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_BRIGHTNESS, args_brightness_zero, 0x3F))
+
+            # 2. 扩展矩阵彻底熄灭: [VARSTORE(0x01), led_id, 0x00, 0x00, 0x00, 0x00]
             args_ext_none = [VARSTORE, led_id, 0x00, 0x00, 0x00, 0x00]
             packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_LIGHTING, args_ext_none, 0x3F))
 

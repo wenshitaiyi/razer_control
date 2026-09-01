@@ -24,8 +24,8 @@ export default {
     api.post('/dpi', { dpi_x, dpi_y: dpi_y || dpi_x, target_path }),
   setPollingRate: (rate_hz, target_path = null) =>
     api.post('/polling-rate', { rate_hz, target_path }),
-  setLighting: (enabled, r = 0, g = 255, b = 0, target_path = null) =>
-    api.post('/lighting', { enabled, r, g, b, target_path }),
+  setLighting: ({ enabled = true, mode = 'static', brightness = 100, r = 0, g = 255, b = 0, target_path = null }) =>
+    api.post('/lighting', { enabled, mode, brightness, r, g, b, target_path }),
 
   // 预设配置方案
   getProfiles: () => api.get('/profiles'),

@@ -163,15 +163,15 @@
         </div>
       </div>
 
-      <!-- 3. RGB / 单色灯效与一键熄灭控制卡片 -->
+      <!-- 3. RGB / 单色灯效、亮度与一键熄灭控制卡片 -->
       <div class="rz-card control-card">
         <div class="card-header">
           <div class="title-with-icon">
             <el-icon color="#00ff00"><Sunny /></el-icon>
-            <h3>{{ selectedDevice?.is_single_color ? '单色绿光 / 双灯区控制' : 'RGB 幻彩灯效 / 一键熄灭' }}</h3>
+            <h3>{{ selectedDevice?.is_single_color ? '灯光强度与模式控制' : 'RGB 幻彩灯效 / 一键熄灭' }}</h3>
           </div>
           <span class="rz-badge" :class="selectedDevice?.is_single_color ? 'rz-badge-warning' : 'rz-badge-info'">
-            {{ selectedDevice?.is_single_color ? '单色硬件 (Logo/滚轮)' : 'Chroma 幻彩 RGB' }}
+            {{ selectedDevice?.is_single_color ? '单色绿光硬件 (Logo 灯)' : 'Chroma 幻彩 RGB' }}
           </span>
         </div>
 
@@ -179,19 +179,63 @@
           <!-- 针对单色设备（如 DeathAdder Essential）的适配提示 -->
           <div v-if="selectedDevice?.is_single_color" class="single-color-banner">
             <el-icon color="#00ff00"><InfoFilled /></el-icon>
-            <span>检测到当前鼠标为<b>单色绿光硬件</b>（DeathAdder Essential 系列），已为您自动启用多灯区（Logo & 滚轮）纯净控制协议。</span>
+            <span>已针对<b>{{ selectedDevice.product_string }} (RZ01-0385)</b> 启用硬件级亮度调节 (0x0F, 0x04) 与常亮/呼吸灯效。</span>
           </div>
 
-          <!-- 开关与调色器 -->
-          <div class="lighting-toggle-row">
-            <span class="slider-label">硬件灯光状态</span>
-            <el-switch
-              v-model="ledEnabled"
-              :active-text="selectedDevice?.is_single_color ? '开启绿光常亮' : '开启静态光'"
-              inactive-text="彻底关闭 (零眩光/省电)"
-              inline-prompt
-              style="--el-switch-on-color: #00ff00; --el-switch-off-color: #334155;"
+          <!-- 灯效模式选择 -->
+          <div class="lighting-mode-selector">
+            <button
+              class="mode-chip"
+              :class="{ active: ledEnabled && ledMode === 'static' }"
+              @click="setLightingMode('static')"
+            >
+              <el-icon><Sunny /></el-icon>
+              <span>静态常亮</span>
+            </button>
+            <button
+              class="mode-chip"
+              :class="{ active: ledEnabled && ledMode === 'breathing' }"
+              @click="setLightingMode('breathing')"
+            >
+              <el-icon><Refresh /></el-icon>
+              <span>呼吸节奏</span>
+            </button>
+            <button
+              class="mode-chip"
+              :class="{ active: !ledEnabled }"
+              @click="setLightingMode('off')"
+            >
+              <el-icon><Moon /></el-icon>
+              <span>彻底熄灭</span>
+            </button>
+          </div>
+
+          <!-- 灯光亮度调节滑块 (仅在开启时显示) -->
+          <div v-if="ledEnabled" class="slider-row" style="margin-top: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="slider-label">灯光强度 (亮度)</span>
+              <span class="dpi-y-tag" style="font-weight: 700;">{{ ledBrightness }}%</span>
+            </div>
+            <el-slider
+              v-model="ledBrightness"
+              :min="5"
+              :max="100"
+              :step="5"
+              show-input
+              :show-input-controls="false"
             />
+            <div class="preset-chips" style="margin-top: 4px;">
+              <span class="chip-label">亮度快捷档:</span>
+              <button
+                v-for="b in [25, 50, 75, 100]"
+                :key="b"
+                class="dpi-chip"
+                :class="{ active: ledBrightness === b }"
+                @click="ledBrightness = b"
+              >
+                {{ b }}%
+              </button>
+            </div>
           </div>
 
           <!-- Chroma 设备的调色器 -->
@@ -215,15 +259,21 @@
             ></div>
           </div>
 
-          <!-- 单色设备的常亮预览 -->
+          <!-- 单色设备的常亮/呼吸预览 -->
           <div v-else-if="ledEnabled && selectedDevice?.is_single_color" class="single-led-preview">
-            <div class="green-indicator-dot glow-green"></div>
-            <span class="text-mute">已就绪：将向 Logo 氛围灯 (0x04) 与 滚轮灯 (0x01) 同步下发静态常亮指令。</span>
+            <div
+              class="green-indicator-dot"
+              :class="{ 'glow-green': ledMode === 'static', 'breath-animation': ledMode === 'breathing' }"
+              :style="{ opacity: ledBrightness / 100 }"
+            ></div>
+            <span class="text-mute">
+              {{ ledMode === 'breathing' ? `已就绪：Logo 氛围灯将以绿色进行呼吸律动 (亮度 ${ledBrightness}%)` : `已就绪：Logo 氛围灯静态常亮 (亮度 ${ledBrightness}%)` }}
+            </span>
           </div>
 
           <div v-else class="led-off-banner">
             <el-icon color="#8b949e" :size="24"><Moon /></el-icon>
-            <p>已选择彻底熄灭硬件所有灯区。完全切断灯光渲染管线，消除发热与 DWM 资源争用。</p>
+            <p>已选择彻底熄灭硬件所有灯光。完全切断发光二极管供电，消除发热与眩光。</p>
           </div>
 
           <div class="apply-footer">
@@ -233,7 +283,7 @@
               :loading="savingLed"
               @click="applyLighting"
             >
-              {{ ledEnabled ? (selectedDevice?.is_single_color ? '应用单色常亮设定' : '应用 RGB 静态灯效') : '一键彻底熄灭所有灯光' }}
+              {{ ledEnabled ? `应用灯光设置 (${ledMode === 'breathing' ? '呼吸' : '常亮'} · ${ledBrightness}%)` : '一键彻底熄灭所有灯光' }}
             </el-button>
           </div>
         </div>
@@ -302,9 +352,21 @@ const savingDpi = ref(false)
 const pollingRate = ref(1000)
 const savingPolling = ref(false)
 
-const ledEnabled = ref(false)
+const ledEnabled = ref(true)
+const ledMode = ref('static') // 'static' | 'breathing' | 'off'
+const ledBrightness = ref(100)
 const ledColor = ref('#00FF00')
 const savingLed = ref(false)
+
+const setLightingMode = (mode) => {
+  if (mode === 'off') {
+    ledEnabled.value = false
+    ledMode.value = 'off'
+  } else {
+    ledEnabled.value = true
+    ledMode.value = mode
+  }
+}
 
 const quickProfiles = ref([])
 const applyingId = ref(null)
@@ -426,9 +488,17 @@ const applyLighting = async () => {
   try {
     const path = selectedDevice.value?.path || null
     const { r, g, b } = hexToRgb(ledColor.value)
-    const res = await api.setLighting(ledEnabled.value, r, g, b, path)
+    const res = await api.setLighting({
+      enabled: ledEnabled.value,
+      mode: ledMode.value,
+      brightness: ledBrightness.value,
+      r,
+      g,
+      b,
+      target_path: path
+    })
     if (isSuccess(res)) {
-      ElMessage.success(res.msg || (ledEnabled.value ? '灯效已更新' : '已彻底熄灭灯光'))
+      ElMessage.success(res.msg || (ledEnabled.value ? `灯效已更新 (${ledMode.value === 'breathing' ? '呼吸' : '常亮'} · ${ledBrightness.value}%)` : '已彻底熄灭灯光'))
     }
   } catch (e) {
   } finally {
@@ -792,6 +862,44 @@ onMounted(async () => {
   border: 1px solid #1c2838;
 }
 
+.lighting-mode-selector {
+  display: flex;
+  gap: 8px;
+  background: #0d131c;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid #1c2838;
+}
+
+.mode-chip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #151f2c;
+  border: 1px solid var(--rz-border);
+  border-radius: 6px;
+  color: var(--rz-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-chip:hover {
+  background: #1c2a3d;
+  color: #ffffff;
+}
+
+.mode-chip.active {
+  background: rgba(0, 255, 0, 0.15);
+  border-color: var(--rz-green);
+  color: var(--rz-green);
+  font-weight: 600;
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+}
+
 .green-indicator-dot {
   width: 24px;
   height: 24px;
@@ -799,6 +907,22 @@ onMounted(async () => {
   background: #00ff00;
   box-shadow: 0 0 12px #00ff00;
   flex-shrink: 0;
+  transition: opacity 0.3s;
+}
+
+.breath-animation {
+  animation: breath 3s ease-in-out infinite;
+}
+
+@keyframes breath {
+  0%, 100% {
+    opacity: 0.15;
+    box-shadow: 0 0 4px #00ff00;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 16px #00ff00;
+  }
 }
 
 .led-off-banner {

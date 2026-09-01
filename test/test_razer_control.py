@@ -86,14 +86,20 @@ class TestRazerControlProtocol(unittest.TestCase):
         self.assertEqual(packets_125[0][2], [0x08])
 
     def test_build_lighting_packets(self):
-        """测试 Logo 氛围灯静态常亮与彻底熄灭报文"""
-        # 开启灯光 (Logo 0x04)
-        packets_on = build_lighting_packets(True, 0, 255, 0)
-        self.assertEqual(len(packets_on), 1)
+        """测试 Logo 氛围灯亮度与常亮/熄灭报文"""
+        # 开启灯光 (包含亮度帧与静态常亮帧)
+        packets_on = build_lighting_packets(True, mode="static", brightness=100, r=0, g=255, b=0)
+        self.assertEqual(len(packets_on), 2)
+        # 第一帧为亮度设置 (0x0F, 0x04)
+        self.assertEqual(packets_on[0][0], CMD_CLASS_LIGHTING)
+        self.assertEqual(packets_on[0][1], 0x04)
+        # 第二帧为模式设置 (0x0F, 0x02)
+        self.assertEqual(packets_on[1][0], CMD_CLASS_LIGHTING)
+        self.assertEqual(packets_on[1][1], CMD_ID_SET_LIGHTING)
 
-        # 彻底熄灭
+        # 彻底熄灭 (包含亮度归零与关闭灯效帧)
         packets_off = build_lighting_packets(False)
-        self.assertEqual(len(packets_off), 1)
+        self.assertEqual(len(packets_off), 2)
 
     def test_list_razer_devices(self):
         """测试设备探测函数正确执行且具备设备特性字段"""

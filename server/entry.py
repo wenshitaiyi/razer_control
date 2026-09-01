@@ -25,6 +25,8 @@ class PollingRatePayload(BaseModel):
 
 class LightingPayload(BaseModel):
     enabled: bool = Field(True, description="是否启用灯效 (False 代表彻底关灯)")
+    mode: Optional[str] = Field("static", description="灯效模式: static (常亮), breathing (呼吸), none (关闭)")
+    brightness: Optional[int] = Field(100, description="亮度百分比 (0~100)", ge=0, le=100)
     r: int = Field(0, description="红色分量 (0~255)", ge=0, le=255)
     g: int = Field(255, description="绿色分量 (0~255)", ge=0, le=255)
     b: int = Field(0, description="蓝色分量 (0~255)", ge=0, le=255)
@@ -103,8 +105,16 @@ async def start(ctx):
 
     @router.post("/lighting")
     async def set_lighting(req: Request, payload: LightingPayload):
-        """设置鼠标灯效 (静态 RGB 颜色 / 彻底关灯)"""
-        result = await _logic.apply_lighting(payload.enabled, payload.r, payload.g, payload.b, payload.target_path)
+        """设置鼠标灯效 (常亮/呼吸/关灯及亮度调节)"""
+        result = await _logic.apply_lighting(
+            enabled=payload.enabled,
+            mode=payload.mode or "static",
+            brightness=payload.brightness if payload.brightness is not None else 100,
+            r=payload.r,
+            g=payload.g,
+            b=payload.b,
+            target_path=payload.target_path
+        )
         await record_audit(ctx, req, result, LOCAL_USER)
         if result.get("success"):
             return res.success(data=result, msg=result.get("message", "灯效设置成功"))

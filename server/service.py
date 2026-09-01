@@ -152,11 +152,20 @@ class RazerControlLogic:
         )
         return res
 
-    async def apply_lighting(self, enabled: bool, r: int = 0, g: int = 255, b: int = 0, target_path: Optional[str] = None) -> Dict[str, Any]:
-        """向雷蛇鼠标下发静态 RGB / 单色常亮 / 彻底关灯设置"""
-        packets = build_lighting_packets(enabled, r, g, b)
-        action_name = "SET_LED_RGB" if enabled else "TURN_OFF_LED"
-        payload_data = {"enabled": enabled, "r": r, "g": g, "b": b}
+    async def apply_lighting(
+        self,
+        enabled: bool,
+        mode: str = "static",
+        brightness: int = 100,
+        r: int = 0,
+        g: int = 255,
+        b: int = 0,
+        target_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """向雷蛇鼠标下发灯效（支持常亮/呼吸/熄灭及亮度 0-100% 调节）"""
+        packets = build_lighting_packets(enabled=enabled, mode=mode, brightness=brightness, r=r, g=g, b=b)
+        action_name = f"SET_LED_{mode.upper()}" if enabled else "TURN_OFF_LED"
+        payload_data = {"enabled": enabled, "mode": mode, "brightness": brightness, "r": r, "g": g, "b": b}
 
         res = await asyncio.to_thread(send_packets_to_device, packets, target_path)
 
