@@ -1,7 +1,16 @@
 """
 Razer HID 90-byte Feature Report Protocol Encoder and Communication Driver.
-Supports both classic/essential single-color devices (DeathAdder Essential 0x0098)
-and modern multi-zone Chroma RGB devices (DeathAdder V2, Viper, Basilisk).
+Verified with OpenRazer kernel driver specification:
+- byte 0: Status (0x00)
+- byte 1: Transaction ID (0xFF / 0x3F)
+- byte 2..3: Remaining Packets (0x00, 0x00 - __be16)
+- byte 4: Protocol Type (0x00)
+- byte 5: Data Size (len(arguments))
+- byte 6: Command Class
+- byte 7: Command ID
+- byte 8..87: Arguments payload (up to 80 bytes)
+- byte 88: XOR Checksum (Byte 2 to Byte 87 XOR)
+- byte 89: Reserved (0x00)
 """
 import time
 from typing import List, Dict, Any, Optional, Tuple
@@ -27,6 +36,8 @@ CMD_ID_SET_LIGHTING = 0x02
 CMD_ID_SET_LED_STATE = 0x00
 CMD_ID_SET_LED_BRIGHTNESS = 0x03
 CMD_ID_SET_DEVICE_MODE = 0x04
+CMD_ID_GET_FIRMWARE = 0x81
+CMD_ID_GET_SERIAL = 0x82
 
 # 存储区域常量 (VARSTORE 固化至板载闪存, NOSTORE 临时生效)
 NOSTORE = 0x00
@@ -47,11 +58,11 @@ STATUS_FAILURE = 0x03
 STATUS_TIMEOUT = 0x04
 STATUS_NOT_SUPPORTED = 0x05
 
-# 单色绿光/单色设备 PID 清单 (不支持通用 Chroma 调色，需使用单色/矩阵协议)
+# 单色绿光/单色设备 PID 清单 (如 DeathAdder Essential RZ01-0385 / 0x0098)
 SINGLE_COLOR_DEVICES = {
-    0x0098: {"name": "Razer DeathAdder Essential (2021)", "color": "green", "leds": [LOGO_LED, SCROLL_WHEEL_LED]},
+    0x0098: {"name": "Razer DeathAdder Essential (2021 / RZ01-0385)", "color": "green", "leds": [LOGO_LED]},
     0x006C: {"name": "Razer DeathAdder Essential", "color": "green", "leds": [LOGO_LED, SCROLL_WHEEL_LED]},
-    0x0071: {"name": "Razer DeathAdder Essential (White Edition)", "color": "white", "leds": [LOGO_LED, SCROLL_WHEEL_LED]},
+    0x0071: {"name": "Razer DeathAdder Essential (White Edition)", "color": "white", "leds": [LOGO_LED]},
     0x0037: {"name": "Razer DeathAdder 2013", "color": "green", "leds": [LOGO_LED, SCROLL_WHEEL_LED]},
     0x0038: {"name": "Razer DeathAdder 1800", "color": "blue", "leds": [LOGO_LED]},
     0x0054: {"name": "Razer DeathAdder 3500", "color": "green", "leds": [LOGO_LED]},
@@ -64,12 +75,12 @@ def create_razer_report(command_class: int, command_id: int, arguments: List[int
     构造雷蛇标准的 90 字节 Feature Report 报文：
     - byte 0: 状态标志 (0x00)
     - byte 1: 事务 ID (0xFF / 0x3F / 0x1F)
-    - byte 2: 剩余数据包数 (0x00)
-    - byte 3: 协议版本 (0x00)
-    - byte 4: 参数长度 (len(arguments))
-    - byte 5: 命令类别 (command_class)
-    - byte 6: 命令 ID (command_id)
-    - byte 7..7+len-1: 参数载荷
+    - byte 2..3: 剩余数据包数 (__be16, 0x00, 0x00)
+    - byte 4: 协议类型 (0x00)
+    - byte 5: 参数长度 (len(arguments))
+    - byte 6: 命令类别 (command_class)
+    - byte 7: 命令 ID (command_id)
+    - byte 8..8+len-1: 参数载荷 (从第 8 字节开始)
     - byte 88: 校验和 (从 byte 2 到 byte 87 的异或和 XOR Checksum)
     - byte 89: 尾部填充 (0x00)
     """
@@ -78,13 +89,14 @@ def create_razer_report(command_class: int, command_id: int, arguments: List[int
     report[1] = transaction_id & 0xFF
     report[2] = 0x00
     report[3] = 0x00
-    report[4] = len(arguments)
-    report[5] = command_class & 0xFF
-    report[6] = command_id & 0xFF
+    report[4] = 0x00
+    report[5] = len(arguments) & 0xFF
+    report[6] = command_class & 0xFF
+    report[7] = command_id & 0xFF
 
     for i, val in enumerate(arguments):
-        if 7 + i < 88:
-            report[7 + i] = val & 0xFF
+        if 8 + i < 88:
+            report[8 + i] = val & 0xFF
 
     # 计算从第 2 字节到第 87 字节的异或和
     checksum = 0
@@ -98,8 +110,8 @@ def create_razer_report(command_class: int, command_id: int, arguments: List[int
 
 def build_dpi_packets(dpi: int, dpi_y: Optional[int] = None, pid: Optional[int] = None) -> List[Tuple[int, int, List[int], int]]:
     """
-    构造 DPI 设置报文列表（包含主协议帧与兼容回退帧）
-    返回格式: List[(cmd_class, cmd_id, args, transaction_id)]
+    构造 DPI 设置报文 (0x04, 0x05)
+    返回: List[(cmd_class, cmd_id, args, transaction_id)]
     """
     dpi = max(100, min(35000, dpi))
     dpi_y = dpi if dpi_y is None else max(100, min(35000, dpi_y))
@@ -109,76 +121,48 @@ def build_dpi_packets(dpi: int, dpi_y: Optional[int] = None, pid: Optional[int] 
     dpi_y_h = (dpi_y >> 8) & 0xFF
     dpi_y_l = dpi_y & 0xFF
 
-    packets = []
-
-    # 1. 7-Byte VARSTORE 协议 (OpenRazer 标准: [0x01, x_h, x_l, y_h, y_l, 0x00, 0x00])
+    # 7-Byte VARSTORE 协议 [VARSTORE(0x01), X高, X低, Y高, Y低, 0x00, 0x00]
     args_7byte = [VARSTORE, dpi_x_h, dpi_x_l, dpi_y_h, dpi_y_l, 0x00, 0x00]
-    packets.append((CMD_CLASS_PERFORMANCE, CMD_ID_SET_DPI, args_7byte, 0xFF))
-    packets.append((CMD_CLASS_PERFORMANCE, CMD_ID_SET_DPI, args_7byte, 0x3F))
-
-    # 2. 5-Byte 经典协议 (用于部分早期及无线设备: [0x00, x_h, x_l, y_h, y_l])
-    args_5byte = [0x00, dpi_x_h, dpi_x_l, dpi_y_h, dpi_y_l]
-    packets.append((CMD_CLASS_PERFORMANCE, CMD_ID_SET_DPI, args_5byte, 0xFF))
-    packets.append((CMD_CLASS_PERFORMANCE, CMD_ID_SET_DPI, args_5byte, 0x1F))
-
-    return packets
+    return [
+        (CMD_CLASS_PERFORMANCE, CMD_ID_SET_DPI, args_7byte, 0xFF)
+    ]
 
 
 def build_polling_rate_packets(rate_hz: int) -> List[Tuple[int, int, List[int], int]]:
-    """构造回报率设置报文列表"""
+    """构造回报率设置报文 (0x00, 0x05)"""
     rate_map_std = {1000: 0x01, 500: 0x02, 125: 0x08}
     val_std = rate_map_std.get(rate_hz, 0x01)
 
-    rate_map_v2 = {8000: 0x01, 4000: 0x02, 2000: 0x04, 1000: 0x08, 500: 0x10, 125: 0x40}
-    val_v2 = rate_map_v2.get(rate_hz, 0x08)
-
-    packets = [
-        # 1. 标准回报率指令 (0x00, 0x05, [val])
-        (CMD_CLASS_DEVICE, CMD_ID_SET_POLLING_RATE, [val_std], 0xFF),
-        (CMD_CLASS_DEVICE, CMD_ID_SET_POLLING_RATE, [val_std], 0x3F),
-        (CMD_CLASS_DEVICE, CMD_ID_SET_POLLING_RATE, [val_std], 0x1F),
-        # 2. 新版回报率指令 (0x00, 0x40, [0x00, val2])
-        (CMD_CLASS_DEVICE, CMD_ID_SET_POLLING_RATE2, [0x00, val_v2], 0xFF),
+    return [
+        (CMD_CLASS_DEVICE, CMD_ID_SET_POLLING_RATE, [val_std], 0xFF)
     ]
-    return packets
 
 
 def build_lighting_packets(enabled: bool, r: int = 0, g: int = 255, b: int = 0, pid: Optional[int] = None, brightness: int = 255) -> List[Tuple[int, int, List[int], int]]:
     """
-    构造多灯区（Logo 与 滚轮灯）的静态常亮、彻底关灯与亮度调节报文
+    构造 Logo 氛围灯的静态常亮与彻底熄灭报文 (0x0F, 0x02)
     """
     r = max(0, min(255, r))
     g = max(0, min(255, g))
     b = max(0, min(255, b))
-    brightness = 255 if enabled else 0
 
-    target_leds = [LOGO_LED, SCROLL_WHEEL_LED]
+    if pid and pid in SINGLE_COLOR_DEVICES:
+        target_leds = SINGLE_COLOR_DEVICES[pid].get("leds", [LOGO_LED])
+    else:
+        target_leds = [LOGO_LED]
+
     packets = []
 
     if enabled:
         for led_id in target_leds:
-            # 1. 扩展矩阵静态常亮协议 (Extended Matrix Static, Class 0x0F, ID 0x02)
+            # 扩展矩阵静态常亮协议: [VARSTORE(0x01), led_id, Static(0x01), 0x00, 0x00, 0x01, R, G, B]
             args_ext_static = [VARSTORE, led_id, 0x01, 0x00, 0x00, 0x01, r, g, b]
             packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_LIGHTING, args_ext_static, 0x3F))
-
-            # 2. 传统单色开启与亮度 (Class 0x03, ID 0x00 & 0x03)
-            packets.append((CMD_CLASS_CLASSIC_LED, CMD_ID_SET_LED_STATE, [VARSTORE, led_id, 0x01], 0x3F))
-            packets.append((CMD_CLASS_CLASSIC_LED, CMD_ID_SET_LED_BRIGHTNESS, [VARSTORE, led_id, brightness], 0x3F))
-
-            # 3. 经典 Chroma RGB 协议 (Class 0x0F, ID 0x02)
-            packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_LIGHTING, [led_id, 0x01, r, g, b], 0xFF))
     else:
         for led_id in target_leds:
-            # 1. 扩展矩阵彻底关闭协议 (Extended Matrix None, Class 0x0F, ID 0x02)
+            # 扩展矩阵彻底熄灭协议: [VARSTORE(0x01), led_id, None(0x00), 0x00, 0x00, 0x00]
             args_ext_none = [VARSTORE, led_id, 0x00, 0x00, 0x00, 0x00]
             packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_LIGHTING, args_ext_none, 0x3F))
-
-            # 2. 传统单色彻底熄灭与亮度归零 (Class 0x03)
-            packets.append((CMD_CLASS_CLASSIC_LED, CMD_ID_SET_LED_STATE, [VARSTORE, led_id, 0x00], 0x3F))
-            packets.append((CMD_CLASS_CLASSIC_LED, CMD_ID_SET_LED_BRIGHTNESS, [VARSTORE, led_id, 0x00], 0x3F))
-
-            # 3. 经典 Chroma 熄灭
-            packets.append((CMD_CLASS_LIGHTING, CMD_ID_SET_LIGHTING, [led_id, 0x00], 0xFF))
 
     return packets
 
@@ -215,7 +199,7 @@ def list_razer_devices() -> List[Dict[str, Any]]:
         color_scheme = dev_spec.get("color", "rgb")
 
         # 判断是否为硬件控制首选接口 (优先 MI_00 / 接口 0)
-        is_control_interface = (interface_num == 0) or ("MI_00" in path_str) or (interface_num in (0, 1, 2) and usage_page in (1, 0xFF00, 0x0C))
+        is_control_interface = (interface_num == 0) or ("MI_00" in path_str)
 
         devices.append({
             "path": path_str,
@@ -244,7 +228,7 @@ def list_razer_devices() -> List[Dict[str, Any]]:
 
 def send_packets_to_device(packets: List[Tuple[int, int, List[int], int]], target_path: Optional[str] = None, target_pid: Optional[int] = None) -> Dict[str, Any]:
     """
-    向目标雷蛇设备逐帧下发控制报文，支持多协议自动兼容回退
+    向目标雷蛇设备逐帧下发控制报文并读取状态
     """
     if not hid:
         return {
@@ -292,8 +276,9 @@ def send_packets_to_device(packets: List[Tuple[int, int, List[int], int]], targe
             target_dev_name = dev_meta["product_string"]
             target_pid_hex = dev_meta["product_id_hex"]
 
-            # 遍历协议报文列表，依次尝试写入
+            # 遍历协议报文列表，依次写入硬件
             any_success = False
+            last_status = -1
             for cmd_class, cmd_id, args, trans_id in packets:
                 report_payload = create_razer_report(cmd_class, cmd_id, args, trans_id)
                 wire_data = b"\x00" + report_payload
@@ -304,30 +289,31 @@ def send_packets_to_device(packets: List[Tuple[int, int, List[int], int]], targe
                 response = dev_handle.get_feature_report(0x00, 91)
                 if response:
                     status_byte = response[1] if len(response) > 1 else -1
-                    best_status = status_byte
+                    last_status = status_byte
                     best_resp_hex = bytes(response).hex()
-
-                    # 只要返回 SUCCESS(0x02) 或非 FAILURE，即表示设备接受了指令
                     if status_byte in (STATUS_SUCCESS, STATUS_NEW):
                         any_success = True
+                        best_status = status_byte
 
             dev_handle.close()
             dev_handle = None
 
             status_names = {
-                STATUS_SUCCESS: "SUCCESS",
-                STATUS_BUSY: "BUSY",
-                STATUS_FAILURE: "FAILURE",
-                STATUS_TIMEOUT: "TIMEOUT",
-                STATUS_NOT_SUPPORTED: "NOT_SUPPORTED"
+                STATUS_SUCCESS: "SUCCESS (0x02)",
+                STATUS_BUSY: "BUSY (0x01)",
+                STATUS_FAILURE: "FAILURE (0x03)",
+                STATUS_TIMEOUT: "TIMEOUT (0x04)",
+                STATUS_NOT_SUPPORTED: "NOT_SUPPORTED (0x05)"
             }
-            status_name = status_names.get(best_status, f"STATUS_0x{best_status:02X}")
+            final_status = best_status if any_success else last_status
+            status_name = status_names.get(final_status, f"STATUS_0x{final_status:02X}")
+            is_success = any_success or (final_status == STATUS_SUCCESS)
 
             return {
-                "success": True,
-                "status_code": best_status,
+                "success": is_success,
+                "status_code": final_status,
                 "status_name": status_name,
-                "message": f"指令已成功写入设备: {target_dev_name}",
+                "message": f"指令已成功生效于硬件: {target_dev_name}" if is_success else f"设备返回状态: {status_name}",
                 "device_name": target_dev_name,
                 "device_pid": target_pid_hex,
                 "interface_number": dev_meta["interface_number"],

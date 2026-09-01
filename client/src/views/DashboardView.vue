@@ -286,7 +286,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  Mouse, Refresh, Odometer, Timer, Sunny, Moon, Warning, CollectionTag
+  Mouse, Refresh, Odometer, Timer, Sunny, Moon, Warning, CollectionTag, InfoFilled
 } from '@element-plus/icons-vue'
 import api from '../api'
 
